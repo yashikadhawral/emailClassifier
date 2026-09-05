@@ -1,0 +1,738 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Inbox Report</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#12161f;
+    --panel:#1a2029;
+    --panel-2:#20273353;
+    --line:#2b3242;
+    --paper:#ECE8DD;
+    --paper-dim:#a9a599;
+    --urgent:#e3572c;
+    --important:#d9a441;
+    --normal:#6f8f9e;
+    --low:#5f7d68;
+    --accent-work:#7c9eb2;
+    --accent-academic:#9a8ac2;
+    --accent-finance:#c2905f;
+    --accent-personal:#8fb08a;
+    --accent-promo:#8a8f9a;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;height:100%;}
+  body{
+    background:var(--ink);
+    color:var(--paper);
+    font-family:'IBM Plex Sans',sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .app{
+    display:grid;
+    grid-template-columns:340px 1fr;
+    height:100vh;
+    min-height:600px;
+  }
+  /* SIDEBAR */
+  .sidebar{
+    border-right:1px solid var(--line);
+    display:flex;
+    flex-direction:column;
+    overflow:hidden;
+  }
+  .brand{
+    padding:22px 20px 16px;
+    border-bottom:1px solid var(--line);
+  }
+  .brand h1{
+    font-family:'Source Serif 4',serif;
+    font-weight:600;
+    font-size:1.35rem;
+    margin:0 0 3px;
+    letter-spacing:0.2px;
+  }
+  .brand p{
+    margin:0;
+    font-size:0.78rem;
+    color:var(--paper-dim);
+  }
+  .filters{
+    display:flex;
+    gap:6px;
+    padding:14px 20px;
+    border-bottom:1px solid var(--line);
+    flex-wrap:wrap;
+  }
+  .filter-chip{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:0.68rem;
+    padding:4px 9px;
+    border-radius:3px;
+    border:1px solid var(--line);
+    color:var(--paper-dim);
+    background:transparent;
+    cursor:pointer;
+    transition:border-color .15s, color .15s;
+  }
+  .filter-chip:hover{ color:var(--paper); }
+  .filter-chip.active{
+    border-color:var(--paper);
+    color:var(--paper);
+  }
+  .thread-list{
+    flex:1;
+    overflow-y:auto;
+  }
+  .thread{
+    padding:14px 20px;
+    border-bottom:1px solid var(--line);
+    cursor:pointer;
+    position:relative;
+  }
+  .thread:hover{ background:var(--panel-2); }
+  .thread.selected{ background:var(--panel-2); }
+  .thread.selected::before{
+    content:"";
+    position:absolute;
+    left:0; top:0; bottom:0;
+    width:3px;
+    background:var(--paper);
+  }
+  .thread-top{
+    display:flex;
+    justify-content:space-between;
+    align-items:baseline;
+    margin-bottom:4px;
+  }
+  .thread-from{
+    font-size:0.85rem;
+    font-weight:500;
+  }
+  .thread-time{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:0.68rem;
+    color:var(--paper-dim);
+  }
+  .thread-subject{
+    font-size:0.83rem;
+    color:var(--paper-dim);
+    margin-bottom:7px;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+  .thread-tags{
+    display:flex;
+    gap:5px;
+    align-items:center;
+  }
+  .dot{
+    width:6px;height:6px;border-radius:50%;
+    flex-shrink:0;
+  }
+  .tag{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:0.62rem;
+    color:var(--paper-dim);
+  }
+
+  /* MAIN */
+  .report{
+    overflow-y:auto;
+    padding:36px 48px 60px;
+  }
+  .report-head{
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-start;
+    border-bottom:1px solid var(--line);
+    padding-bottom:22px;
+    margin-bottom:26px;
+    gap:24px;
+  }
+  .report-head h2{
+    font-family:'Source Serif 4',serif;
+    font-weight:600;
+    font-size:1.55rem;
+    line-height:1.3;
+    margin:0 0 8px;
+    max-width:60ch;
+  }
+  .meta-line{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:0.76rem;
+    color:var(--paper-dim);
+  }
+  .badges{
+    display:flex;
+    gap:8px;
+    flex-shrink:0;
+  }
+  .badge{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:0.68rem;
+    padding:5px 10px;
+    border-radius:3px;
+    border:1px solid currentColor;
+    white-space:nowrap;
+    height:fit-content;
+  }
+  .section{
+    margin-bottom:30px;
+  }
+  .section-label{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:0.7rem;
+    color:var(--paper-dim);
+    margin-bottom:10px;
+  }
+  .summary-text{
+    font-family:'Source Serif 4',serif;
+    font-size:1.05rem;
+    line-height:1.65;
+    color:var(--paper);
+    max-width:66ch;
+  }
+  .kv-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fill,minmax(200px,1fr));
+    gap:10px;
+  }
+  .kv{
+    border:1px solid var(--line);
+    border-radius:4px;
+    padding:10px 12px;
+  }
+  .kv-k{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:0.65rem;
+    color:var(--paper-dim);
+    margin-bottom:4px;
+  }
+  .kv-v{
+    font-size:0.88rem;
+  }
+  .actions{
+    display:flex;
+    flex-direction:column;
+    gap:9px;
+  }
+  .action-item{
+    display:flex;
+    align-items:flex-start;
+    gap:10px;
+    padding:10px 12px;
+    border:1px solid var(--line);
+    border-radius:4px;
+  }
+  .action-item input{
+    margin-top:3px;
+    accent-color:var(--urgent);
+  }
+  .action-item.done label{
+    text-decoration:line-through;
+    color:var(--paper-dim);
+  }
+  .action-item label{
+    font-size:0.88rem;
+    flex:1;
+  }
+  .action-deadline{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:0.68rem;
+    color:var(--urgent);
+    white-space:nowrap;
+  }
+  .translate-row{
+    display:flex;
+    gap:8px;
+    align-items:center;
+    flex-wrap:wrap;
+  }
+  select, .btn{
+    font-family:'IBM Plex Sans',sans-serif;
+    font-size:0.8rem;
+    background:transparent;
+    color:var(--paper);
+    border:1px solid var(--line);
+    border-radius:4px;
+    padding:7px 12px;
+    cursor:pointer;
+  }
+  .btn:hover{ border-color:var(--paper); }
+  .btn.primary{
+    background:var(--paper);
+    color:var(--ink);
+    border-color:var(--paper);
+    font-weight:500;
+  }
+  .translation-out{
+    margin-top:14px;
+    padding:14px 16px;
+    border:1px dashed var(--line);
+    border-radius:4px;
+    font-family:'Source Serif 4',serif;
+    font-size:0.95rem;
+    line-height:1.6;
+    color:var(--paper-dim);
+    display:none;
+  }
+  .translation-out.show{ display:block; color:var(--paper); }
+  .original-message summary{
+    list-style:none;
+    margin-bottom:10px;
+  }
+  .original-message summary::-webkit-details-marker{ display:none; }
+  .original-message summary::before{
+    content:"› ";
+  }
+  .original-message[open] summary::before{
+    content:"⌄ ";
+  }
+  .original-text{
+    white-space:pre-wrap;
+    font-family:'IBM Plex Mono',monospace;
+    font-size:0.8rem;
+    line-height:1.6;
+    color:var(--paper-dim);
+    border:1px solid var(--line);
+    border-radius:4px;
+    padding:14px 16px;
+    max-width:70ch;
+    margin:0;
+  }
+  ::-webkit-scrollbar{ width:8px; }
+  ::-webkit-scrollbar-thumb{ background:var(--line); border-radius:4px; }
+  .brand-top{
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-start;
+    gap:10px;
+  }
+  .brand-top .btn{
+    font-size:0.72rem;
+    padding:6px 10px;
+    flex-shrink:0;
+  }
+  .header-btns{
+    display:flex;
+    gap:6px;
+  }
+  .btn.danger{
+    color:var(--urgent);
+    border-color:var(--urgent);
+  }
+  .btn.danger:hover{
+    background:var(--urgent);
+    color:var(--ink);
+  }
+  .overlay{
+    display:none;
+    position:fixed;
+    inset:0;
+    background:rgba(10,12,16,0.72);
+    z-index:10;
+    align-items:center;
+    justify-content:center;
+  }
+  .overlay.show{ display:flex; }
+  .compose{
+    width:min(640px, 90vw);
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:6px;
+    padding:20px;
+  }
+  .compose-head{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin-bottom:12px;
+  }
+  #rawInput{
+    width:100%;
+    min-height:220px;
+    resize:vertical;
+    background:var(--ink);
+    border:1px solid var(--line);
+    border-radius:4px;
+    color:var(--paper);
+    font-family:'IBM Plex Mono',monospace;
+    font-size:0.82rem;
+    line-height:1.5;
+    padding:12px;
+  }
+  #rawInput:focus{ outline:none; border-color:var(--paper); }
+  .compose-foot{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin-top:12px;
+  }
+  @media (max-width:760px){
+    .app{ grid-template-columns:1fr; }
+    .sidebar{ display:none; }
+    .report{ padding:24px 20px 40px; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="sidebar">
+    <div class="brand">
+      <div class="brand-top">
+        <div>
+          <h1>Inbox Report</h1>
+          <p id="threadCount">7 threads triaged today</p>
+        </div>
+        <div class="header-btns">
+          <button class="btn" id="newBtn">+ New</button>
+          <button class="btn danger" id="clearBtn">Clear</button>
+        </div>
+      </div>
+    </div>
+    <div class="filters" id="filters"></div>
+    <div class="thread-list" id="threadList"></div>
+  </div>
+  <div class="report" id="report"></div>
+</div>
+
+<div class="overlay" id="overlay">
+  <div class="compose">
+    <div class="compose-head">
+      <span class="section-label">paste raw email</span>
+      <button class="btn" id="closeCompose">Close</button>
+    </div>
+    <textarea id="rawInput" placeholder="From: ...&#10;Subject: ...&#10;&#10;Paste the full email body here."></textarea>
+    <div class="compose-foot">
+      <span class="meta-line" id="analyzeStatus"></span>
+      <button class="btn primary" id="analyzeBtn">Analyze</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const CATEGORY_COLOR = {
+  work: 'var(--accent-work)',
+  academic: 'var(--accent-academic)',
+  finance: 'var(--accent-finance)',
+  personal: 'var(--accent-personal)',
+  promotions: 'var(--accent-promo)'
+};
+const PRIORITY_COLOR = {
+  urgent: 'var(--urgent)',
+  important: 'var(--important)',
+  normal: 'var(--normal)',
+  low: 'var(--low)'
+};
+
+const emails = [
+  {
+    id:1, from:'Priya Nandakumar', subject:'Re: Q3 model review — need your slides by Thu',
+    time:'09:14', category:'work', priority:'urgent',
+    summary:'Priya is asking for the finalized evaluation slides ahead of Thursday\'s Q3 review. She flags that the F1 comparison table from last week is out of date and needs the DistilBERT numbers swapped in before the deck goes to the director.',
+    keyInfo:[
+      {k:'Deadline', v:'Thu, 11:00 AM'},
+      {k:'People', v:'Priya Nandakumar, Director (Anand K.)'},
+      {k:'Referenced doc', v:'Q3_eval_slides_v4.pptx'},
+      {k:'Sentiment', v:'Time-pressured, cordial'}
+    ],
+    actions:[
+      {text:'Swap in updated DistilBERT F1 numbers on slide 6', deadline:'Thu 9 AM', done:false},
+      {text:'Send revised deck to Priya for review', deadline:'Thu 11 AM', done:false}
+    ]
+  },
+  {
+    id:2, from:'Dr. S. Kulkarni', subject:'Assignment 4 grading — clarification needed',
+    time:'08:02', category:'academic', priority:'important',
+    summary:'Dr. Kulkarni is asking whether the ROUGE-L scores in your submitted report were computed on the validation or held-out test split, since the numbers look unusually high compared to the class average. Wants a short clarifying reply, not a resubmission.',
+    keyInfo:[
+      {k:'Deadline', v:'Fri, EOD'},
+      {k:'People', v:'Dr. S. Kulkarni'},
+      {k:'Referenced doc', v:'Assignment_4_report.pdf'},
+      {k:'Sentiment', v:'Neutral, inquisitive'}
+    ],
+    actions:[
+      {text:'Confirm ROUGE-L was computed on held-out test split', deadline:'Fri EOD', done:false}
+    ]
+  },
+  {
+    id:3, from:'HDFC Bank Alerts', subject:'Auto-debit successful — Credit Card ending 4417',
+    time:'06:45', category:'finance', priority:'normal',
+    summary:'Automated confirmation that the monthly credit card auto-debit was processed successfully. No action needed unless the amount looks incorrect.',
+    keyInfo:[
+      {k:'Amount', v:'₹4,280.00'},
+      {k:'Account', v:'Card ending 4417'},
+      {k:'Date processed', v:'Sept 5'}
+    ],
+    actions:[]
+  },
+  {
+    id:4, from:'Darshan Poojary', subject:'pipeline is failing on the solar site again',
+    time:'Yesterday', category:'work', priority:'important',
+    summary:'Darshan reports the Solapur TN3 forecasting pipeline threw a shape mismatch error overnight during the scheduled run. He\'s attached the traceback and thinks it\'s related to a recent feature column change, and wants a second pair of eyes before the next scheduled run.',
+    keyInfo:[
+      {k:'Deadline', v:'Before tonight\'s run'},
+      {k:'People', v:'Darshan Poojary'},
+      {k:'Attachment', v:'traceback_0904.log'},
+      {k:'Sentiment', v:'Concerned, direct'}
+    ],
+    actions:[
+      {text:'Review traceback_0904.log for the shape mismatch', deadline:'Today', done:false},
+      {text:'Check recent feature column changes to the pipeline', deadline:'Today', done:true}
+    ]
+  },
+  {
+    id:5, from:'Mom', subject:'ghar kab aa raha hai?',
+    time:'Yesterday', category:'personal', priority:'low',
+    summary:'A short, casual message asking when you\'re coming home this weekend and whether you\'ll be there for dinner on Saturday.',
+    keyInfo:[
+      {k:'People', v:'Mom'},
+      {k:'Language detected', v:'Hindi (romanized)'}
+    ],
+    actions:[]
+  },
+  {
+    id:6, from:'Coursera', subject:'New course recommendations based on your activity',
+    time:'2 days ago', category:'promotions', priority:'low',
+    summary:'Marketing email recommending three new courses based on recent browsing activity. No action required.',
+    keyInfo:[
+      {k:'Type', v:'Promotional / newsletter'}
+    ],
+    actions:[]
+  },
+  {
+    id:7, from:'Experiqs HR', subject:'Internship stipend — timesheet reminder',
+    time:'2 days ago', category:'work', priority:'normal',
+    summary:'HR reminder that this month\'s timesheet is due before payroll processing begins. Late submissions may push disbursal to the following cycle.',
+    keyInfo:[
+      {k:'Deadline', v:'Mon, 6 PM'},
+      {k:'People', v:'Experiqs HR'}
+    ],
+    actions:[
+      {text:'Submit timesheet for the month', deadline:'Mon 6 PM', done:false}
+    ]
+  }
+];
+
+let activeFilter = 'all';
+let selectedId = 1;
+
+function renderFilters(){
+  const cats = ['all','work','academic','finance','personal','promotions'];
+  const el = document.getElementById('filters');
+  el.innerHTML = cats.map(c =>
+    `<button class="filter-chip ${activeFilter===c?'active':''}" data-cat="${c}">${c}</button>`
+  ).join('');
+  el.querySelectorAll('.filter-chip').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      activeFilter = btn.dataset.cat;
+      renderFilters();
+      renderList();
+    });
+  });
+}
+
+function renderList(){
+  const list = document.getElementById('threadList');
+  const filtered = activeFilter==='all' ? emails : emails.filter(e=>e.category===activeFilter);
+  list.innerHTML = filtered.map(e=>`
+    <div class="thread ${e.id===selectedId?'selected':''}" data-id="${e.id}">
+      <div class="thread-top">
+        <span class="thread-from">${e.from}</span>
+        <span class="thread-time">${e.time}</span>
+      </div>
+      <div class="thread-subject">${e.subject}</div>
+      <div class="thread-tags">
+        <span class="dot" style="background:${PRIORITY_COLOR[e.priority]}"></span>
+        <span class="tag">${e.priority}</span>
+        <span class="tag">·</span>
+        <span class="tag" style="color:${CATEGORY_COLOR[e.category]}">${e.category}</span>
+      </div>
+    </div>
+  `).join('');
+  list.querySelectorAll('.thread').forEach(t=>{
+    t.addEventListener('click', ()=>{
+      selectedId = parseInt(t.dataset.id);
+      renderList();
+      renderReport();
+    });
+  });
+}
+
+function renderReport(){
+  const e = emails.find(x=>x.id===selectedId);
+  const report = document.getElementById('report');
+  report.innerHTML = `
+    <div class="report-head">
+      <div>
+        <h2>${e.subject}</h2>
+        <div class="meta-line">From ${e.from} — ${e.time}</div>
+      </div>
+      <div class="badges">
+        <span class="badge" style="color:${PRIORITY_COLOR[e.priority]}">${e.priority}</span>
+        <span class="badge" style="color:${CATEGORY_COLOR[e.category]}">${e.category}</span>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-label">summary</div>
+      <p class="summary-text">${e.summary}</p>
+    </div>
+
+    ${e.keyInfo.length ? `
+    <div class="section">
+      <div class="section-label">key info</div>
+      <div class="kv-grid">
+        ${e.keyInfo.map(kv=>`
+          <div class="kv">
+            <div class="kv-k">${kv.k}</div>
+            <div class="kv-v">${kv.v}</div>
+          </div>
+        `).join('')}
+      </div>
+    </div>` : ''}
+
+    ${e.actions.length ? `
+    <div class="section">
+      <div class="section-label">action items</div>
+      <div class="actions">
+        ${e.actions.map((a,i)=>`
+          <div class="action-item ${a.done?'done':''}">
+            <input type="checkbox" id="act-${i}" ${a.done?'checked':''} data-idx="${i}">
+            <label for="act-${i}">${a.text}</label>
+            <span class="action-deadline">${a.deadline}</span>
+          </div>
+        `).join('')}
+      </div>
+    </div>` : ''}
+
+    <div class="section">
+      <div class="section-label">translate</div>
+      <div class="translate-row">
+        <select id="langSelect">
+          <option value="en">English</option>
+          <option value="hi">Hindi</option>
+          <option value="mr">Marathi</option>
+        </select>
+        <button class="btn primary" id="translateBtn">Translate summary</button>
+      </div>
+      <div class="translation-out" id="translationOut"></div>
+    </div>
+
+    ${e.raw ? `
+    <div class="section">
+      <details class="original-message">
+        <summary class="section-label" style="cursor:pointer">original message</summary>
+        <pre class="original-text">${e.raw.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</pre>
+      </details>
+    </div>` : ''}
+  `;
+
+  report.querySelectorAll('.action-item input').forEach(cb=>{
+    cb.addEventListener('change', ()=>{
+      const idx = parseInt(cb.dataset.idx);
+      e.actions[idx].done = cb.checked;
+      renderReport();
+    });
+  });
+
+  document.getElementById('translateBtn').addEventListener('click', async ()=>{
+    const lang = document.getElementById('langSelect').value;
+    const out = document.getElementById('translationOut');
+
+    if(lang === 'en'){
+      out.textContent = e.summary;
+      out.classList.add('show');
+      return;
+    }
+
+    out.textContent = 'Translating…';
+    out.classList.add('show');
+    try{
+      const res = await fetch(`${API_BASE}/api/translate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: e.summary, lang })
+      });
+      if(!res.ok) throw new Error(`${res.status}`);
+      const data = await res.json();
+      out.textContent = data.translated;
+    }catch(err){
+      out.textContent = `Translation failed — is the API running? (${err.message})`;
+    }
+  });
+}
+
+// ---- Input / analysis wiring ----
+// Swap analyzeEmail() out for a real API call to your model backend.
+// It must resolve to an object matching the shape of items in `emails`.
+const API_BASE = 'http://localhost:8000';
+const API_URL = `${API_BASE}/api/analyze`;
+
+async function analyzeEmail(rawText){
+  const res = await fetch(API_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text: rawText })
+  });
+  if (!res.ok) {
+    throw new Error(`Analysis failed (${res.status})`);
+  }
+  // api.py already returns an object shaped exactly like items in `emails`:
+  // { id, from, subject, time, category, priority, summary, keyInfo, actions }
+  return await res.json();
+}
+
+function updateThreadCount(){
+  document.getElementById('threadCount').textContent = `${emails.length} threads triaged today`;
+}
+
+const overlay = document.getElementById('overlay');
+document.getElementById('newBtn').addEventListener('click', ()=>{
+  overlay.classList.add('show');
+  document.getElementById('rawInput').focus();
+});
+document.getElementById('clearBtn').addEventListener('click', ()=>{
+  if(!confirm('Clear all threads? This cannot be undone.')) return;
+  emails.length = 0;
+  selectedId = null;
+  updateThreadCount();
+  renderList();
+  document.getElementById('report').innerHTML = '<p class="meta-line">No threads yet — click + New to analyze an email.</p>';
+});
+document.getElementById('closeCompose').addEventListener('click', ()=>{
+  overlay.classList.remove('show');
+});
+document.getElementById('analyzeBtn').addEventListener('click', async ()=>{
+  const raw = document.getElementById('rawInput').value.trim();
+  const status = document.getElementById('analyzeStatus');
+  if(!raw){ status.textContent = 'Paste an email first.'; return; }
+  status.textContent = 'Analyzing…';
+  try {
+    const result = await analyzeEmail(raw);
+    emails.unshift(result);
+    selectedId = result.id;
+    updateThreadCount();
+    renderList();
+    renderReport();
+    document.getElementById('rawInput').value = '';
+    status.textContent = '';
+    overlay.classList.remove('show');
+  } catch (err) {
+    status.textContent = `Failed to analyze — is the API running? (${err.message})`;
+  }
+});
+
+renderFilters();
+renderList();
+renderReport();
+updateThreadCount();
+</script>
+</body>
+</html>
