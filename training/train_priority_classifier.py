@@ -185,10 +185,8 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--base_csv", default="priority_base_labelled.csv")
-    parser.add_argument("--manual_csv", default="priority_auto_labelled.csv")
-    parser.add_argument("--max_low_from_spam", type=int, default=500)
-    parser.add_argument("--output_dir", default="saved_models/priority_classifier")
-    parser.add_argument("--epochs", type=int, default=4)
+    parser.add_argument("--base_csv", default="data/processed/priority_base_labelled.csv")
+    parser.add_argument("--manual_csv", default="data/processed/priority_auto_labelled.csv")    parser.add_argument("--max_low_from_spam", type=int, default=500)
+    parser.add_argument("--output_dir", default="saved_models/distilbert_priority")    parser.add_argument("--epochs", type=int, default=4)
     args = parser.parse_args()
     main(args)
