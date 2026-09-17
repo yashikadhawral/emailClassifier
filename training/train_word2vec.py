@@ -1,19 +1,4 @@
-"""
-training/train_word2vec.py
 
-CLI entry point for Phase 1 (NLP Module 4). Thin wrapper around
-word2vec_embeddings.py -- run this from the repo root (not from inside
-training/) so the data_prep/ and word2vec_embeddings.py imports resolve:
-
-    python training/train_word2vec.py \
-        --enron_csv data/raw/enron_emails.csv \
-        --sg 1 \
-        --out_path saved_models/word2vec_enron.model
-
-On Colab: mount Drive first, point --out_path at the mounted saved_models/
-folder so the trained model survives the runtime disconnecting, then copy
-it into your local saved_models/ before running the API locally.
-"""
 
 import argparse
 import sys
@@ -36,11 +21,52 @@ if __name__ == "__main__":
     parser.add_argument("--epochs", type=int, default=10)
     args = parser.parse_args()
 
-    train_word2vec(
-        args.enron_csv, sg=args.sg, out_path=args.out_path,
-        vector_size=args.vector_size, window=args.window,
-        min_count=args.min_count, epochs=args.epochs,
-    )
+    def train_word2vec(
+        enron_csv: str,
+        sg: int = 1,
+        out_path: str = DEFAULT_MODEL_PATH,
+        vector_size: int = VECTOR_SIZE,
+        window: int = WINDOW,
+        min_count: int = MIN_COUNT,
+        epochs: int = EPOCHS,
+        workers: int = 3,
+    ) -> Word2Vec:
+        """sg=1 -> skip-gram, sg=0 -> CBOW."""
+        import time
+        from gensim.models.callbacks import CallbackAny2Vec
+
+        class _EpochLogger(CallbackAny2Vec):
+            def __init__(self):
+                self.epoch = 0
+                self.start = None
+
+            def on_epoch_begin(self, model):
+                self.start = time.time()
+
+            def on_epoch_end(self, model):
+                elapsed = time.time() - self.start
+                print(f"  epoch {self.epoch} done in {elapsed:.1f}s")
+                self.epoch += 1
+
+        corpus = build_corpus(enron_csv)
+        print(f"training on {len(corpus)} documents, {workers} workers, {epochs} epochs")
+
+        model = Word2Vec(
+            sentences=corpus,
+            vector_size=vector_size,
+            window=window,
+            min_count=min_count,
+            sg=sg,
+            epochs=epochs,
+            workers=workers,
+            callbacks=[_EpochLogger()],
+        )
+
+        import os
+        os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+        model.save(out_path)
+        print(f"saved -> {out_path}")
+        return model
 
     print("\n--- nearest-neighbor sanity check ---")
     for w in CHECK_WORDS:
