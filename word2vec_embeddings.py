@@ -11,10 +11,13 @@ they never shell out to the CLI script.
 NLP Module 4 deliverable.
 """
 
+import os
 import re
+import time
 
 import numpy as np
 from gensim.models import Word2Vec
+from gensim.models.callbacks import CallbackAny2Vec
 
 from data_prep.data_prep import load_enron_dataset
 
@@ -26,6 +29,21 @@ MIN_COUNT = 2
 EPOCHS = 10
 
 DEFAULT_MODEL_PATH = "saved_models/word2vec_enron.model"
+
+
+class _EpochLogger(CallbackAny2Vec):
+    """Prints timing after each epoch so training is never silent/blind."""
+    def __init__(self):
+        self.epoch = 0
+        self.start = None
+
+    def on_epoch_begin(self, model):
+        self.start = time.time()
+
+    def on_epoch_end(self, model):
+        elapsed = time.time() - self.start
+        print(f"  epoch {self.epoch} done in {elapsed:.1f}s")
+        self.epoch += 1
 
 
 def tokenize(text: str) -> list[str]:
@@ -52,10 +70,11 @@ def train_word2vec(
     window: int = WINDOW,
     min_count: int = MIN_COUNT,
     epochs: int = EPOCHS,
+    workers: int = 3,
 ) -> Word2Vec:
     """sg=1 -> skip-gram, sg=0 -> CBOW."""
     corpus = build_corpus(enron_csv)
-    print(f"training on {len(corpus)} documents")
+    print(f"training on {len(corpus)} documents, {workers} workers, {epochs} epochs")
 
     model = Word2Vec(
         sentences=corpus,
@@ -64,9 +83,10 @@ def train_word2vec(
         min_count=min_count,
         sg=sg,
         epochs=epochs,
+        workers=workers,
+        callbacks=[_EpochLogger()],
     )
 
-    import os
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
     model.save(out_path)
     print(f"saved -> {out_path}")
@@ -77,9 +97,7 @@ def get_embedding_matrix(vocab: dict, model_path: str = DEFAULT_MODEL_PATH) -> n
     """
     vocab: {word: index} from the LSTM tokenizer (lstm_priority_classifier.py).
     Returns a numpy array shaped [len(vocab), VECTOR_SIZE].
-    Words not found in the trained Word2Vec vocab get a small random init
-    (out-of-vocab handling -- the LSTM's embedding layer stays trainable so
-    these can still move during fine-tuning).
+    Words not found in the trained Word2Vec vocab get a small random init.
     """
     model = Word2Vec.load(model_path)
     dim = model.wv.vector_size
@@ -96,7 +114,6 @@ def get_embedding_matrix(vocab: dict, model_path: str = DEFAULT_MODEL_PATH) -> n
 
 
 def nearest_neighbors(word: str, model_path: str = DEFAULT_MODEL_PATH, topn: int = 8):
-    """Sanity check for the viva -- proves the model actually learned from Enron,
-    not just loaded pretrained vectors."""
+    """Sanity check for the viva -- proves the model actually learned from Enron."""
     model = Word2Vec.load(model_path)
     return model.wv.most_similar(word, topn=topn)
