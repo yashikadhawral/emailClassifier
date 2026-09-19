@@ -176,17 +176,55 @@ def main(args):
     )
 
     trainer.train()
-    print("Final eval:", trainer.evaluate())
+    final_eval = trainer.evaluate()
+    print("Final eval:", final_eval)
 
     model.save_pretrained(args.output_dir)
     tokenizer.save_pretrained(args.output_dir)
     print(f"Saved priority classifier -> {args.output_dir}")
 
+    # --- baseline_metrics.json for the Phase 2 comparison table ---
+    import json
+    import time
+
+    n_params = sum(p.numel() for p in model.parameters())
+    device = next(model.parameters()).device
+
+    model.eval()
+    total_time = 0.0
+    n_examples = 0
+    eval_loader = torch.utils.data.DataLoader(val_dataset, batch_size=32)
+    with torch.no_grad():
+        for batch in eval_loader:
+            batch = {k: v.to(device) for k, v in batch.items() if k != "labels"}
+            start = time.perf_counter()
+            model(**batch)
+            total_time += time.perf_counter() - start
+            n_examples += batch["input_ids"].size(0)
+    ms_per_example = (total_time / max(n_examples, 1)) * 1000
+
+    baseline_metrics = {
+        "model": "distilbert_priority",
+        "accuracy": final_eval["eval_accuracy"],
+        "f1_macro": final_eval["eval_f1_macro"],
+        "params": n_params,
+        "inference_ms_per_example": ms_per_example,
+    }
+    print("\n--- baseline metrics ---")
+    print(json.dumps(baseline_metrics, indent=2))
+
+    with open(args.baseline_json, "w") as f:
+        json.dump(baseline_metrics, f, indent=2)
+    print(f"Saved -> {args.baseline_json}")
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--base_csv", default="data/processed/priority_base_labelled.csv")
-    parser.add_argument("--manual_csv", default="data/processed/priority_auto_labelled.csv")    parser.add_argument("--max_low_from_spam", type=int, default=500)
-    parser.add_argument("--output_dir", default="saved_models/distilbert_priority")    parser.add_argument("--epochs", type=int, default=4)
+    parser.add_argument("--manual_csv", default="data/processed/priority_auto_labelled.csv")
+    parser.add_argument("--max_low_from_spam", type=int, default=500)
+    parser.add_argument("--output_dir", default="saved_models/distilbert_priority")
+    parser.add_argument("--epochs", type=int, default=4)
+    parser.add_argument("--baseline_json", default="baseline_metrics.json")
     args = parser.parse_args()
     main(args)
