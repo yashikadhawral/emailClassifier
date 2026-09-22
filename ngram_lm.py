@@ -8,6 +8,7 @@ import re
 import random
 import math
 from collections import defaultdict, Counter
+from email import message_from_string
 
 import pandas as pd
 import nltk
@@ -18,6 +19,18 @@ from nltk.tokenize import sent_tokenize, word_tokenize
 START, END = "<s>", "</s>"
 
 
+def extract_body(raw_message: str) -> str:
+    """Enron's emails.csv 'message' column holds a full raw RFC-822
+    message (headers + blank line + body). Parse out just the body."""
+    try:
+        msg = message_from_string(str(raw_message))
+        payload = msg.get_payload()
+        return payload if isinstance(payload, str) else str(raw_message)
+    except Exception:
+        parts = re.split(r'\n\s*\n', str(raw_message), maxsplit=1)
+        return parts[1] if len(parts) > 1 else str(raw_message)
+
+
 def clean_text(text: str) -> str:
     text = re.sub(r'-{2,}.*?-{2,}', ' ', str(text))  # strip forwarded-by banners
     text = re.sub(r'\S+@\S+', ' ', text)              # strip emails
@@ -25,12 +38,13 @@ def clean_text(text: str) -> str:
     return text.lower()
 
 
-def load_sentences(csv_path: str, text_col: str = "body", sample_size: int = 5000):
+def load_sentences(csv_path: str, text_col: str = "message", sample_size: int = 5000):
     df = pd.read_csv(csv_path, nrows=sample_size)
-    col = text_col if text_col in df.columns else df.columns[0]
+    col = text_col if text_col in df.columns else df.columns[-1]
     sentences = []
-    for text in df[col].dropna():
-        for sent in sent_tokenize(clean_text(text)):
+    for raw in df[col].dropna():
+        body = extract_body(raw)
+        for sent in sent_tokenize(clean_text(body)):
             tokens = word_tokenize(sent)
             if 2 <= len(tokens) <= 40:
                 sentences.append(tokens)
