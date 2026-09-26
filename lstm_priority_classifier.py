@@ -14,6 +14,9 @@ Stays a plain importable module (like word2vec_embeddings.py) so pipeline.py
 can eventually import LSTMPriorityClassifier directly without pulling in the
 DistilBERT training script's heavier dependencies. Training is driven from
 training/train_lstm_priority.py.
+
+Includes an optional attention-pooling head (use_attention=True) as an
+ablation against the default last-hidden-state pooling.
 """
 
 import torch
@@ -86,6 +89,26 @@ def collate_batch(batch):
     return padded, lengths, labels
 
 
+class AttentionPool(nn.Module):
+    """Scores each timestep's RNN output, softmaxes over the non-padded
+    positions only, and returns the weighted sum -- an alternative to
+    taking just the last hidden state."""
+
+    def __init__(self, in_dim: int):
+        super().__init__()
+        self.score = nn.Linear(in_dim, 1)
+
+    def forward(self, outputs, lengths):
+        # outputs: [batch, seq_len, in_dim], lengths: [batch]
+        scores = self.score(outputs).squeeze(-1)
+        positions = torch.arange(outputs.size(1), device=outputs.device).unsqueeze(0)
+        mask = positions < lengths.to(outputs.device).unsqueeze(1)
+        scores = scores.masked_fill(~mask, float("-inf"))
+        weights = torch.softmax(scores, dim=1)
+        pooled = torch.bmm(weights.unsqueeze(1), outputs).squeeze(1)
+        return pooled
+
+
 class LSTMPriorityClassifier(nn.Module):
     def __init__(
         self,
@@ -97,6 +120,7 @@ class LSTMPriorityClassifier(nn.Module):
         dropout: float = 0.3,
         rnn_type: str = "lstm",  # "lstm" or "gru"
         freeze_embeddings: bool = False,
+        use_attention: bool = False,  # False = last hidden state (original behaviour)
     ):
         super().__init__()
         vocab_size, embed_dim = embedding_matrix.shape
@@ -115,6 +139,8 @@ class LSTMPriorityClassifier(nn.Module):
             dropout=dropout if num_layers > 1 else 0.0,
         )
         rnn_out_dim = hidden_dim * (2 if bidirectional else 1)
+        self.use_attention = use_attention
+        self.attention = AttentionPool(rnn_out_dim) if use_attention else None
         self.dropout = nn.Dropout(dropout)
         self.fc = nn.Linear(rnn_out_dim, num_classes)
 
@@ -125,15 +151,18 @@ class LSTMPriorityClassifier(nn.Module):
             embedded, lengths.cpu(), batch_first=True, enforce_sorted=False
         )
         if isinstance(self.rnn, nn.LSTM):
-            _, (h_n, _) = self.rnn(packed)
+            packed_out, (h_n, _) = self.rnn(packed)
         else:
-            _, h_n = self.rnn(packed)
+            packed_out, h_n = self.rnn(packed)
 
-        # h_n: [num_layers * num_directions, batch, hidden_dim] -- take the last layer.
-        if self.rnn.bidirectional:
-            last_fwd = h_n[-2]
-            last_bwd = h_n[-1]
-            final = torch.cat([last_fwd, last_bwd], dim=1)
+        if self.use_attention:
+            outputs, _ = nn.utils.rnn.pad_packed_sequence(
+                packed_out, batch_first=True, total_length=input_ids.size(1)
+            )
+            final = self.attention(outputs, lengths)
+        elif self.rnn.bidirectional:
+            # h_n: [num_layers * num_directions, batch, hidden_dim] -- last layer.
+            final = torch.cat([h_n[-2], h_n[-1]], dim=1)
         else:
             final = h_n[-1]
 

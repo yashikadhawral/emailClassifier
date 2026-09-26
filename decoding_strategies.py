@@ -22,13 +22,16 @@ def _next_logits(model, enc_hidden, enc_mask, dec_ids):
 
 
 @torch.no_grad()
-def greedy_decode(model, input_ids, attention_mask, max_length=60):
+def greedy_decode(model, input_ids, attention_mask, max_length=60, min_length=8):
     start = model.config.decoder_start_token_id or model.config.bos_token_id
     eos = model.config.eos_token_id
     enc = model.get_encoder()(input_ids=input_ids, attention_mask=attention_mask).last_hidden_state
     dec = torch.tensor([[start]], device=input_ids.device)
-    for _ in range(max_length):
-        nxt = int(torch.argmax(_next_logits(model, enc, attention_mask, dec)[0]))
+    for step in range(max_length):
+        logits = _next_logits(model, enc, attention_mask, dec)[0]
+        if step < min_length:
+            logits[eos] = float("-inf")
+        nxt = int(torch.argmax(logits))
         dec = torch.cat([dec, torch.tensor([[nxt]], device=dec.device)], dim=1)
         if nxt == eos:
             break
