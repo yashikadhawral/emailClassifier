@@ -281,4 +281,12 @@ if __name__ == "__main__":
 
     parser.add_argument("--epochs", type=int, default=8)
     parser.add_argument("--batch_size", type=int, default=32)
-    parser.add_argument("--lr", type=float,
+    parser.add_argument("--lr", type=float, default=1e-3)
+    parser.add_argument("--grad_clip", type=float, default=5.0)
+    parser.add_argument("--device", default=None, help="cuda / cpu, defaults to auto-detect")
+
+    parser.add_argument("--output_dir", default="saved_models/lstm_priority")
+    parser.add_argument("--baseline_json", default="baseline_metrics.json")
+
+    args = parser.parse_args()
+    main(args)

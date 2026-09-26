@@ -22,21 +22,25 @@ def _next_logits(model, enc_hidden, enc_mask, dec_ids):
 
 
 @torch.no_grad()
+@torch.no_grad()
 def greedy_decode(model, input_ids, attention_mask, max_length=60, min_length=8):
     start = model.config.decoder_start_token_id or model.config.bos_token_id
     eos = model.config.eos_token_id
+    forced_bos = getattr(model.config, "forced_bos_token_id", None)
     enc = model.get_encoder()(input_ids=input_ids, attention_mask=attention_mask).last_hidden_state
     dec = torch.tensor([[start]], device=input_ids.device)
     for step in range(max_length):
-        logits = _next_logits(model, enc, attention_mask, dec)[0]
-        if step < min_length:
-            logits[eos] = float("-inf")
-        nxt = int(torch.argmax(logits))
+        if step == 0 and forced_bos is not None:
+            nxt = forced_bos  # matches generate()'s ForcedBOSTokenLogitsProcessor
+        else:
+            logits = _next_logits(model, enc, attention_mask, dec)[0]
+            if step < min_length:
+                logits[eos] = float("-inf")
+            nxt = int(torch.argmax(logits))
         dec = torch.cat([dec, torch.tensor([[nxt]], device=dec.device)], dim=1)
         if nxt == eos:
             break
     return dec[0, 1:].tolist()
-
 
 @torch.no_grad()
 def top_k_sample_decode(model, input_ids, attention_mask, k=40, temperature=0.8, max_length=60, seed=0):
