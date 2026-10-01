@@ -331,6 +331,40 @@
     background:var(--urgent);
     color:var(--ink);
   }
+  .sync-row{
+    display:flex;
+    gap:6px;
+    align-items:center;
+    flex-wrap:wrap;
+    margin-top:12px;
+  }
+  .sync-row .btn{ font-size:0.72rem; padding:6px 10px; }
+  .sync-status{
+    margin:8px 0 0;
+    font-size:0.72rem;
+    color:var(--paper-dim);
+    line-height:1.4;
+  }
+  .cal-row{
+    display:flex;
+    gap:8px;
+    flex-wrap:wrap;
+    align-items:center;
+  }
+  .cal-row input{
+    background:var(--ink);
+    border:1px solid var(--line);
+    border-radius:4px;
+    color:var(--paper);
+    font-family:'IBM Plex Mono',monospace;
+    font-size:0.8rem;
+    padding:7px 10px;
+    color-scheme:dark;
+  }
+  .cal-row input[type=text]{ flex:1; min-width:220px; }
+  .cal-row input:focus{ outline:none; border-color:var(--paper); }
+  .cal-note{ margin-top:8px; font-size:0.78rem; color:var(--paper-dim); }
+  .cal-note a{ color:var(--paper); }
   .overlay{
     display:none;
     position:fixed;
@@ -395,6 +429,11 @@
           <button class="btn danger" id="clearBtn">Clear</button>
         </div>
       </div>
+      <div class="sync-row">
+        <button class="btn" id="syncBtn">Sync Gmail</button>
+        <button class="btn" id="alertBtn">Enable alerts</button>
+      </div>
+      <p class="sync-status" id="syncStatus"></p>
     </div>
     <div class="filters" id="filters"></div>
     <div class="thread-list" id="threadList"></div>
@@ -430,6 +469,14 @@ const PRIORITY_COLOR = {
   normal: 'var(--normal)',
   low: 'var(--low)'
 };
+
+// Email text is attacker-controlled once real Gmail is connected, so everything
+// that goes into innerHTML is escaped.
+function esc(v){
+  return String(v ?? '').replace(/[&<>"']/g, c => (
+    {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]
+  ));
+}
 
 const emails = [
   {
@@ -520,8 +567,11 @@ const emails = [
   }
 ];
 
+emails.forEach(e => { e.demo = true; });
+
 let activeFilter = 'all';
 let selectedId = 1;
+const sameId = (a, b) => String(a) === String(b);
 
 function renderFilters(){
   const cats = ['all','work','academic','finance','personal','promotions'];
@@ -542,23 +592,23 @@ function renderList(){
   const list = document.getElementById('threadList');
   const filtered = activeFilter==='all' ? emails : emails.filter(e=>e.category===activeFilter);
   list.innerHTML = filtered.map(e=>`
-    <div class="thread ${e.id===selectedId?'selected':''}" data-id="${e.id}">
+    <div class="thread ${sameId(e.id, selectedId)?'selected':''}" data-id="${esc(e.id)}">
       <div class="thread-top">
-        <span class="thread-from">${e.from}</span>
-        <span class="thread-time">${e.time}</span>
+        <span class="thread-from">${esc(e.from)}</span>
+        <span class="thread-time">${esc(e.time)}</span>
       </div>
-      <div class="thread-subject">${e.subject}</div>
+      <div class="thread-subject">${esc(e.subject)}</div>
       <div class="thread-tags">
         <span class="dot" style="background:${PRIORITY_COLOR[e.priority]}"></span>
-        <span class="tag">${e.priority}</span>
+        <span class="tag">${esc(e.priority)}</span>
         <span class="tag">·</span>
-        <span class="tag" style="color:${CATEGORY_COLOR[e.category]}">${e.category}</span>
+        <span class="tag" style="color:${CATEGORY_COLOR[e.category]}">${esc(e.category)}</span>
       </div>
     </div>
   `).join('');
   list.querySelectorAll('.thread').forEach(t=>{
     t.addEventListener('click', ()=>{
-      selectedId = parseInt(t.dataset.id);
+      selectedId = t.dataset.id;
       renderList();
       renderReport();
     });
@@ -566,23 +616,27 @@ function renderList(){
 }
 
 function renderReport(){
-  const e = emails.find(x=>x.id===selectedId);
+  const e = emails.find(x=>sameId(x.id, selectedId));
   const report = document.getElementById('report');
+  if(!e){
+    report.innerHTML = '<p class="meta-line">No threads yet — click + New to analyze an email, or Sync Gmail.</p>';
+    return;
+  }
   report.innerHTML = `
     <div class="report-head">
       <div>
-        <h2>${e.subject}</h2>
-        <div class="meta-line">From ${e.from} — ${e.time}</div>
+        <h2>${esc(e.subject)}</h2>
+        <div class="meta-line">From ${esc(e.from)} — ${esc(e.time)}</div>
       </div>
       <div class="badges">
-        <span class="badge" style="color:${PRIORITY_COLOR[e.priority]}">${e.priority}</span>
-        <span class="badge" style="color:${CATEGORY_COLOR[e.category]}">${e.category}</span>
+        <span class="badge" style="color:${PRIORITY_COLOR[e.priority]}">${esc(e.priority)}</span>
+        <span class="badge" style="color:${CATEGORY_COLOR[e.category]}">${esc(e.category)}</span>
       </div>
     </div>
 
     <div class="section">
       <div class="section-label">summary</div>
-      <p class="summary-text">${e.summary}</p>
+      <p class="summary-text">${esc(e.summary)}</p>
     </div>
 
     ${e.keyInfo.length ? `
@@ -591,8 +645,8 @@ function renderReport(){
       <div class="kv-grid">
         ${e.keyInfo.map(kv=>`
           <div class="kv">
-            <div class="kv-k">${kv.k}</div>
-            <div class="kv-v">${kv.v}</div>
+            <div class="kv-k">${esc(kv.k)}</div>
+            <div class="kv-v">${esc(kv.v)}</div>
           </div>
         `).join('')}
       </div>
@@ -605,11 +659,26 @@ function renderReport(){
         ${e.actions.map((a,i)=>`
           <div class="action-item ${a.done?'done':''}">
             <input type="checkbox" id="act-${i}" ${a.done?'checked':''} data-idx="${i}">
-            <label for="act-${i}">${a.text}</label>
-            <span class="action-deadline">${a.deadline}</span>
+            <label for="act-${i}">${esc(a.text)}</label>
+            <span class="action-deadline">${esc(a.deadline)}</span>
           </div>
         `).join('')}
       </div>
+    </div>` : ''}
+
+    ${e.calendar ? `
+    <div class="section">
+      <div class="section-label">calendar</div>
+      <div class="cal-row">
+        <input type="text" id="calTitle" value="${esc(e.calendar.title)}" maxlength="200">
+        <input type="datetime-local" id="calStart" value="${esc(e.calendar.start)}">
+        <button class="btn primary" id="calAddBtn" ${e.calendar.added ? 'disabled' : ''}>${e.calendar.added ? 'Added' : 'Add to calendar'}</button>
+      </div>
+      <div class="cal-note" id="calNote">${
+        e.calendar.added
+          ? 'Added to your calendar.' + (e.calendar.link ? ` <a href="${esc(e.calendar.link)}" target="_blank" rel="noopener">Open in Google Calendar</a>` : '')
+          : (e.calendar.time_defaulted ? 'The email gives a day but no time, so 9:00 AM is a guess — adjust before adding.' : `Found in the email: “${esc(e.calendar.deadline_text)}”. Check it, then add.`)
+      }</div>
     </div>` : ''}
 
     <div class="section">
@@ -642,6 +711,37 @@ function renderReport(){
     });
   });
 
+  const calBtn = document.getElementById('calAddBtn');
+  if(calBtn && !e.calendar.added){
+    calBtn.addEventListener('click', async ()=>{
+      const note = document.getElementById('calNote');
+      const title = document.getElementById('calTitle').value.trim();
+      const start = document.getElementById('calStart').value;
+      if(!title || !start){ note.textContent = 'Give the event a title and a start time.'; return; }
+      calBtn.disabled = true;
+      note.textContent = 'Adding…';
+      try{
+        const res = await fetch(`${API_BASE}/api/calendar/add`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title, start,
+            description: [e.summary, e.link ? `Open in Gmail: ${e.link}` : ''].filter(Boolean).join('\n\n'),
+            source_id: String(e.id)
+          })
+        });
+        const data = await res.json().catch(()=>({}));
+        if(!res.ok) throw new Error(data.detail || `${res.status}`);
+        e.calendar.added = true;
+        e.calendar.link = data.link;
+        renderReport();
+      }catch(err){
+        calBtn.disabled = false;
+        note.textContent = `Could not add: ${err.message}`;
+      }
+    });
+  }
+
   document.getElementById('translateBtn').addEventListener('click', async ()=>{
     const lang = document.getElementById('langSelect').value;
     const out = document.getElementById('translationOut');
@@ -672,7 +772,10 @@ function renderReport(){
 // ---- Input / analysis wiring ----
 // Swap analyzeEmail() out for a real API call to your model backend.
 // It must resolve to an object matching the shape of items in `emails`.
-const API_BASE = 'http://localhost:8000';
+// Served by the API itself at http://localhost:8000/app/frontend.html -> same origin.
+// (Opening this file directly via file:// still points at the local server, but the
+// server's CORS rules will block it -- use the URL above.)
+const API_BASE = location.protocol.startsWith('http') ? '' : 'http://localhost:8000';
 const API_URL = `${API_BASE}/api/analyze`;
 
 async function analyzeEmail(rawText){
@@ -716,6 +819,7 @@ document.getElementById('analyzeBtn').addEventListener('click', async ()=>{
   status.textContent = 'Analyzing…';
   try {
     const result = await analyzeEmail(raw);
+    result.source = 'paste';
     emails.unshift(result);
     selectedId = result.id;
     updateThreadCount();
@@ -729,10 +833,78 @@ document.getElementById('analyzeBtn').addEventListener('click', async ()=>{
   }
 });
 
+// ---- Gmail sync + alerts ----
+const POLL_MS = 60000;
+let pollTimer = null;
+let syncing = false;
+const seenIds = new Set();
+let firstSync = true;
+
+function setSyncStatus(text){ document.getElementById('syncStatus').textContent = text; }
+
+function notifyUrgent(e){
+  if(!('Notification' in window) || Notification.permission !== 'granted') return;
+  new Notification(`Urgent: ${e.subject}`, { body: `${e.from} — ${e.summary}` });
+}
+
+function refreshAlertButton(){
+  const btn = document.getElementById('alertBtn');
+  if(!('Notification' in window)){ btn.textContent = 'Alerts unsupported'; btn.disabled = true; return; }
+  btn.textContent = Notification.permission === 'granted' ? 'Alerts on'
+                  : Notification.permission === 'denied' ? 'Alerts blocked' : 'Enable alerts';
+}
+
+async function syncInbox(){
+  if(syncing) return;
+  syncing = true;
+  setSyncStatus('Syncing Gmail… the first sync can take a minute while the models run.');
+  try{
+    const res = await fetch(`${API_BASE}/api/inbox`);
+    const data = await res.json().catch(()=>({}));
+    if(res.status === 401){
+      if(pollTimer){ clearInterval(pollTimer); pollTimer = null; }
+      setSyncStatus(`${data.detail || 'Google login needed.'} Showing demo data until then.`);
+      return;
+    }
+    if(!res.ok) throw new Error(data.detail || `${res.status}`);
+
+    // real mail replaces the demo threads; pasted emails stay
+    const kept = emails.filter(e => e.source === 'paste');
+    emails.splice(0, emails.length, ...data.emails, ...kept);
+    if(!emails.some(e => sameId(e.id, selectedId))) selectedId = emails.length ? emails[0].id : null;
+
+    const fresh = data.emails.filter(e => !seenIds.has(String(e.id)));
+    const freshUrgent = fresh.filter(e => e.priority === 'urgent');
+    if(!firstSync) freshUrgent.forEach(notifyUrgent);
+    data.emails.forEach(e => seenIds.add(String(e.id)));
+
+    setSyncStatus(`Synced ${new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}` +
+      (firstSync ? '' : ` · ${fresh.length} new${freshUrgent.length ? `, ${freshUrgent.length} urgent` : ''}`));
+    firstSync = false;
+    updateThreadCount();
+    renderList();
+    renderReport();
+    if(!pollTimer) pollTimer = setInterval(syncInbox, POLL_MS);
+  }catch(err){
+    const hint = location.protocol === 'file:' ? ' Open http://localhost:8000/app/frontend.html instead of the file.' : '';
+    setSyncStatus(`Sync failed: ${err.message}.${hint}`);
+  }finally{
+    syncing = false;
+  }
+}
+
+document.getElementById('syncBtn').addEventListener('click', syncInbox);
+document.getElementById('alertBtn').addEventListener('click', async ()=>{
+  if('Notification' in window) await Notification.requestPermission();
+  refreshAlertButton();
+});
+
 renderFilters();
 renderList();
 renderReport();
 updateThreadCount();
+refreshAlertButton();
+syncInbox();
 </script>
 </body>
 </html>

@@ -10,3 +10,10 @@ langdetect>=1.0.9
 sentencepiece>=0.1.99
 sacremoses>=0.1.1
 gensim
+fastapi>=0.110
+uvicorn>=0.27
+spacy>=3.7
+dateparser>=1.2
+google-api-python-client>=2.100
+google-auth-oauthlib>=1.2
+google-auth-httplib2>=0.2
