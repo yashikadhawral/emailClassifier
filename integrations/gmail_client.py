@@ -34,6 +34,7 @@ class GmailMessage:
     date: datetime     # timezone-aware
     body: str          # plain text, quoted replies removed
     link: str
+    labels: tuple = () # Gmail label ids, e.g. CATEGORY_PROMOTIONS, INBOX, UNREAD
 
 
 def _service():
@@ -71,6 +72,7 @@ def parse_message(raw: dict) -> GmailMessage:
         date=_parse_date(headers.get("date"), raw.get("internalDate")),
         body=strip_quoted(_extract_body(payload)),
         link=f"https://mail.google.com/mail/u/0/#all/{raw['id']}",
+        labels=tuple(raw.get("labelIds", [])),
     )
 
 

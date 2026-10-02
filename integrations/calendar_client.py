@@ -12,9 +12,12 @@ Two jobs:
 Dates are resolved relative to when the email was RECEIVED (so "Thursday" in
 an email from Monday means that week's Thursday), in TIMEZONE below.
 
-Deliberately conservative: if the email gives a day but no time, we default
-to 09:00 and flag it so the UI can tell the user to double-check. Events whose
-resolved time is already in the past are not suggested.
+Deliberately conservative:
+  - a day but no time  -> default to 09:00 and flag it (time_defaulted)
+  - a time but no day  -> assume the day the email was received and flag it (day_assumed)
+  - only a month or year, no day ("October 2026") -> no suggestion; we won't guess
+  - resolved time already in the past -> no suggestion
+The UI turns the flags into a "check this before adding" note.
 """
 
 import re
@@ -41,7 +44,8 @@ _WEEKDAY_RE = re.compile(
     r"\b(?:(next|this|coming)\s+)?(" + "|".join(sorted(_WEEKDAYS, key=len, reverse=True)) + r")\b",
     re.I,
 )
-_MONTH = r"(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*"
+_MONTH = (r"(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|"
+          r"aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)")
 _EXPLICIT_DATE_RE = re.compile(
     rf"\b\d{{1,2}}(?:st|nd|rd|th)?\s+(?:of\s+)?{_MONTH}\b"      # 15 September
     rf"|\b{_MONTH}\.?\s+\d{{1,2}}(?:st|nd|rd|th)?\b"              # September 15
@@ -108,7 +112,7 @@ def parse_deadline(text: str, base: Optional[datetime] = None, now: Optional[dat
     text: deadline string from the extractor, e.g. "Thursday, 11:00 AM".
     base: when the email was received (relative words resolve against this).
     now:  current time, for the "already in the past" check.
-    Returns {"start": aware datetime, "time_defaulted": bool} or None.
+    Returns {"start": aware datetime, "time_defaulted": bool, "day_assumed": bool} or None.
     """
     if not text:
         return None
@@ -120,8 +124,11 @@ def parse_deadline(text: str, base: Optional[datetime] = None, now: Optional[dat
 
     if day is None and hour is None:
         return None            # nothing usable ("two days", "this year", "Q3" ...)
-    if day is None:
-        day = base.date()      # time only, e.g. "by 6 PM" -> that day
+    day_assumed = day is None
+    if day_assumed:
+        if re.search(rf"\b{_MONTH}\b|\b(?:19|20)\d{{2}}\b", remainder, re.I):
+            return None        # a month or year with no day: too vague to guess
+        day = base.date()      # time only, e.g. "by 6 PM" -> the day the email arrived
 
     time_defaulted = hour is None
     if time_defaulted:
@@ -130,7 +137,7 @@ def parse_deadline(text: str, base: Optional[datetime] = None, now: Optional[dat
     start = datetime(day.year, day.month, day.day, hour, minute, tzinfo=TZ)
     if start < now - timedelta(minutes=5):
         return None
-    return {"start": start, "time_defaulted": time_defaulted}
+    return {"start": start, "time_defaulted": time_defaulted, "day_assumed": day_assumed}
 
 
 def suggest_event(subject: str, key_info: list, base: Optional[datetime] = None,
@@ -145,6 +152,7 @@ def suggest_event(subject: str, key_info: list, base: Optional[datetime] = None,
         "title": title[:200],
         "start": parsed["start"].strftime("%Y-%m-%dT%H:%M"),   # local, for <input type=datetime-local>
         "time_defaulted": parsed["time_defaulted"],
+        "day_assumed": parsed["day_assumed"],
         "deadline_text": deadline,
     }
 

@@ -478,6 +478,19 @@ function esc(v){
   ));
 }
 
+// Text under the calendar fields: says how the suggested date/time was worked out,
+// and warns when part of it is a guess. Returns HTML-safe text.
+function calendarNote(c){
+  if(c.day_assumed){
+    const d = new Date(c.start);
+    const label = isNaN(d) ? c.start.slice(0, 10)
+                           : d.toLocaleDateString([], {weekday:'short', day:'numeric', month:'short'});
+    return `No day found in the email, so I assumed ${esc(label)} (the day it arrived). Check before adding.`;
+  }
+  if(c.time_defaulted) return 'The email gives a day but no time, so 9:00 AM is a guess — adjust before adding.';
+  return `Found in the email: “${esc(c.deadline_text)}”. Check it, then add.`;
+}
+
 const emails = [
   {
     id:1, from:'Priya Nandakumar', subject:'Re: Q3 model review — need your slides by Thu',
@@ -677,7 +690,7 @@ function renderReport(){
       <div class="cal-note" id="calNote">${
         e.calendar.added
           ? 'Added to your calendar.' + (e.calendar.link ? ` <a href="${esc(e.calendar.link)}" target="_blank" rel="noopener">Open in Google Calendar</a>` : '')
-          : (e.calendar.time_defaulted ? 'The email gives a day but no time, so 9:00 AM is a guess — adjust before adding.' : `Found in the email: “${esc(e.calendar.deadline_text)}”. Check it, then add.`)
+          : calendarNote(e.calendar)
       }</div>
     </div>` : ''}
 

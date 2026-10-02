@@ -47,6 +47,13 @@ PRIORITY_MAP = {
 MAX_EMAIL_CHARS = 4000          # long newsletters/threads: the models truncate anyway
 INBOX_FETCH_LIMIT = 25
 CACHE_KEEP = 100
+CACHE_VERSION = 3   # bump when analysis logic changes; older cached results are then discarded and redone
+# Gmail already sorts promotional/social mail. Trust that over the zero-shot model,
+# which tends to call marketing emails "personal".
+GMAIL_CATEGORY_OVERRIDES = {
+    "CATEGORY_PROMOTIONS": "promotions",
+    "CATEGORY_SOCIAL": "promotions",
+}
 CACHE_PATH = ROOT / "data" / "inbox_cache.json"   # data/ is gitignored
 
 
@@ -82,7 +89,8 @@ def parse_headers(raw: str):
 
 
 def analyze_text(raw: str, from_: Optional[str] = None, subject: Optional[str] = None,
-                 received: Optional[datetime] = None, time_label: str = "Just now") -> dict:
+                 received: Optional[datetime] = None, time_label: str = "Just now",
+                 category_override: Optional[str] = None) -> dict:
     """
     The analysis the old /api/analyze did inline, now shared by the paste box
     and the Gmail sync. from_/subject/received are passed in for Gmail messages
@@ -110,7 +118,7 @@ def analyze_text(raw: str, from_: Optional[str] = None, subject: Optional[str] =
     english = result["translated_input"] or raw
     if result["translated_input"]:
         extracted = extract_key_info(english)
-    category = category_clf.predict(english)
+    category = category_override or category_clf.predict(english)   # override skips the slow model call
 
     # grounded, rule-based reply instead of flan-t5's free-generation --
     # every claim in it traces back to something extracted, never invented
@@ -124,10 +132,10 @@ def analyze_text(raw: str, from_: Optional[str] = None, subject: Optional[str] =
     key_info.extend(extracted)
     key_info.append({"k": "Suggested reply", "v": reply})
 
-    # prefilled calendar event, only when a usable date/time was found
-    calendar = None
-    if category != "promotions":
-        calendar = calendar_client.suggest_event(subject, extracted, base=received)
+    # prefilled calendar event, only when a usable future date/time was found.
+    # It's just a suggestion the user has to click, so promotional mail gets one too
+    # (event invites and "apply by" deadlines often arrive as promotions).
+    calendar = calendar_client.suggest_event(subject, extracted, base=received)
 
     return {
         "id": int(time.time() * 1000),
@@ -163,16 +171,20 @@ _failed_ids = set()   # messages whose analysis crashed; skipped until restart s
 
 def _load_cache() -> dict:
     try:
-        return json.loads(CACHE_PATH.read_text(encoding="utf-8"))
+        data = json.loads(CACHE_PATH.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return {}
+    if not isinstance(data, dict) or data.get("version") != CACHE_VERSION:
+        return {}   # written by an older version of the analysis -> redo it
+    return data.get("emails", {})
 
 
 def _save_cache(cache: dict) -> None:
     newest = sorted(cache.values(), key=lambda e: e["ts"], reverse=True)[:CACHE_KEEP]
     CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
     tmp = CACHE_PATH.with_suffix(".tmp")
-    tmp.write_text(json.dumps({e["id"]: e for e in newest}), encoding="utf-8")
+    tmp.write_text(json.dumps({"version": CACHE_VERSION, "emails": {e["id"]: e for e in newest}}),
+                   encoding="utf-8")
     os.replace(tmp, CACHE_PATH)   # atomic: a crash can't leave a half-written cache
 
 
@@ -210,8 +222,10 @@ def inbox(max_results: int = 10):
             try:
                 msg = gmail_client.fetch_message(mid)
                 body_text = f"{msg.subject}\n\n{msg.body}"[:MAX_EMAIL_CHARS]
+                override = next((GMAIL_CATEGORY_OVERRIDES[l] for l in msg.labels
+                                 if l in GMAIL_CATEGORY_OVERRIDES), None)
                 item = analyze_text(body_text, from_=msg.sender, subject=msg.subject,
-                                    received=msg.date)
+                                    received=msg.date, category_override=override)
                 item["id"] = mid
                 item["link"] = msg.link
                 item["ts"] = msg.date.timestamp()
