@@ -38,7 +38,8 @@ def build_reply(key_info: list, priority: str, sender_name: str = "") -> str:
     doc = kv.get("Referenced doc")
 
     greeting = f"Hi {sender_name}," if sender_name and sender_name != "Unknown sender" else "Hi,"
-    opener = PRIORITY_OPENERS.get(priority, PRIORITY_OPENERS["normal"])
+    norm_priority = {"high": "urgent", "medium": "normal", "low": "low"}.get(str(priority).strip().lower(), str(priority).strip().lower())
+    opener = PRIORITY_OPENERS.get(norm_priority, PRIORITY_OPENERS["normal"])
 
     middle_parts = []
     if doc:
@@ -54,7 +55,7 @@ def build_reply(key_info: list, priority: str, sender_name: str = "") -> str:
     else:
         middle = "I'll look into this and get back to you."
 
-    closer = PRIORITY_CLOSERS.get(priority, PRIORITY_CLOSERS["normal"])
+    closer = PRIORITY_CLOSERS.get(norm_priority, PRIORITY_CLOSERS["normal"])
 
     return f"{greeting}\n\n{opener} {middle} {closer}\n\nBest regards,"
 

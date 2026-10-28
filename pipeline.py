@@ -2,24 +2,55 @@
 pipeline.py
 
 Wires together: language detection -> translation -> priority
-classification -> summarization -> response generation.
+classification -> summarization -> reply drafting.
 
-This is the single entry point the Streamlit app calls.
+This is the core pipeline orchestrator called by the FastAPI backend (api.py).
 """
 
 from translator import Translator
 from priority_classifier import PriorityClassifier
 from summarizer import Summarizer
-from response_generator import ResponseGenerator
+from template_reply import build_reply
+
 
 class EmailAssistantPipeline:
-    def __init__(self):
+    def __init__(self, use_generative_reply: bool = False):
         self.translator = Translator()
         self.priority_clf = PriorityClassifier()
         self.summarizer = Summarizer()
-        self.responder = ResponseGenerator()
+        self.use_generative_reply = use_generative_reply
+        # Lazy reference for optional model-based response generation (flan-t5)
+        self._responder = None
 
-    def process(self, raw_email_text: str, sender_name: str = "") -> dict:
+    @property
+    def responder(self):
+        """
+        Lazy-load ResponseGenerator only if explicitly requested.
+        Kept for research/comparison, but unused by default to avoid hallucination.
+        """
+        if self._responder is None:
+            from response_generator import ResponseGenerator
+            self._responder = ResponseGenerator()
+        return self._responder
+
+    def process(
+        self,
+        raw_email_text: str,
+        sender_name: str = "",
+        extracted_info: list = None,
+        use_generative_reply: bool = None,
+    ) -> dict:
+        """
+        Runs the full analysis pipeline on raw email text:
+        1. Detect language (and translate to English if non-English)
+        2. Classify priority (DistilBERT)
+        3. Summarize content (T5-small on AESLC)
+        4. Draft suggested reply (grounded template by default, or flan-t5 if requested)
+        5. Translate drafted reply back to sender's original language if needed
+        """
+        if use_generative_reply is None:
+            use_generative_reply = self.use_generative_reply
+
         # Print the original/raw email for debugging
         print("Raw email:", repr(raw_email_text))
 
@@ -38,11 +69,23 @@ class EmailAssistantPipeline:
 
         summary = self.summarizer.summarize(english_text)
 
-        response_en = self.responder.generate(
-            email_summary=summary,
-            priority=priority,
-            sender_name=sender_name
-        )
+        # Draft response:
+        # Note on Design / Viva Defense:
+        # Free-form generation via FLAN-T5 was dropped because LLMs risk hallucinating
+        # unconfirmed dates, commitments, or facts. Instead, we default to grounded,
+        # rule-based templates (template_reply.py) driven by extracted key info.
+        if use_generative_reply:
+            response_en = self.responder.generate(
+                email_summary=summary,
+                priority=priority,
+                sender_name=sender_name
+            )
+        else:
+            response_en = build_reply(
+                key_info=extracted_info or [],
+                priority=priority,
+                sender_name=sender_name
+            )
 
         # translate the drafted response back to the sender's language, if needed
         if detected_lang != "en":
@@ -77,4 +120,3 @@ if __name__ == "__main__":
 
     for key, value in result.items():
         print(f"{key}: {value}\n")
-        

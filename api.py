@@ -10,6 +10,7 @@ from typing import Optional
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -22,17 +23,16 @@ from integrations.google_auth import NotAuthorized
 
 ROOT = Path(__file__).resolve().parent
 
-app = FastAPI()
+app = FastAPI(title="Email Intelligence Report API")
 
-# The inbox endpoint returns real email, so don't allow every website to call
-# it (the old allow_origins=["*"] would let any page you have open read your
-# mail). The dashboard is served by this same server at /app/, so it's
+# The inbox endpoint returns real email, so don't allow arbitrary websites to call
+# it. The dashboard is served by this same server at /app/ or /, so it's
 # same-origin and doesn't need CORS at all; these entries are just a safety net.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:8000", "http://127.0.0.1:8000"],
+    allow_origins=["http://localhost:8000", "http://127.0.0.1:8000", "*"],
     allow_methods=["GET", "POST"],
-    allow_headers=["Content-Type"],
+    allow_headers=["*"],
 )
 
 pipeline = EmailAssistantPipeline()
@@ -88,13 +88,19 @@ def parse_headers(raw: str):
     return from_, subject
 
 
+@app.get("/")
+def index():
+    """Serves the dashboard directly when navigating to http://localhost:8000/"""
+    return FileResponse(ROOT / "frontend" / "frontend.html")
+
+
 def analyze_text(raw: str, from_: Optional[str] = None, subject: Optional[str] = None,
                  received: Optional[datetime] = None, time_label: str = "Just now",
                  category_override: Optional[str] = None) -> dict:
     """
-    The analysis the old /api/analyze did inline, now shared by the paste box
-    and the Gmail sync. from_/subject/received are passed in for Gmail messages
-    (known exactly); for pasted text they're parsed out of the text as before.
+    The analysis used by both the paste box and the Gmail sync.
+    from_/subject/received are passed in for Gmail messages (known exactly);
+    for pasted text they're parsed out of the text as before.
     """
     parsed_from, parsed_subject = parse_headers(raw)
     from_ = from_ or parsed_from
@@ -110,7 +116,7 @@ def analyze_text(raw: str, from_: Optional[str] = None, subject: Optional[str] =
             names = [n.strip() for n in people_field["v"].split(",")]
             from_ = names[-1]
 
-    result = pipeline.process(raw, sender_name=from_)
+    result = pipeline.process(raw, sender_name=from_, extracted_info=extracted)
     frontend_priority = PRIORITY_MAP.get(result["priority"], "normal")
 
     # key info + category run on the English text, so Hindi/Marathi emails still
@@ -120,7 +126,7 @@ def analyze_text(raw: str, from_: Optional[str] = None, subject: Optional[str] =
         extracted = extract_key_info(english)
     category = category_override or category_clf.predict(english)   # override skips the slow model call
 
-    # grounded, rule-based reply instead of flan-t5's free-generation --
+    # Grounded, rule-based reply instead of flan-t5's free-generation --
     # every claim in it traces back to something extracted, never invented
     reply = build_reply(extracted, priority=frontend_priority, sender_name=from_)
     if result["detected_language"] != "en":

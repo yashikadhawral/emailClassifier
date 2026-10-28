@@ -32,6 +32,12 @@ from transformers import (
 )
 from rouge_score import rouge_scorer
 
+# Note on Stemming:
+# Modern transformer architectures (DistilBERT, T5, NLLB) use subword tokenizers
+# (WordPiece / SentencePiece), so stemming is not used in training data preprocessing.
+# However, ROUGE evaluation internally applies PorterStemmer (use_stemmer=True)
+# so morphological variants (e.g. 'prioritized' and 'prioritize') are matched when
+# scoring summary n-gram overlaps.
 _SCORER = rouge_scorer.RougeScorer(["rouge1", "rouge2", "rougeL"], use_stemmer=True)
 
 

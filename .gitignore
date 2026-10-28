@@ -5,6 +5,7 @@ __pycache__/
 *.pyc
 .cache/
 .venv/
+venv/
 data/
 
 # Google OAuth secrets -- never commit these

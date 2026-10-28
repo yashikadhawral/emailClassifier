@@ -15,7 +15,10 @@ from nltk import pos_tag, word_tokenize
 # Words that are genuinely ambiguous in business-email context — worth demoing
 AMBIGUOUS_WORDS = ["interest", "charge", "close", "rate", "bank", "account", "settlement"]
 
-POS_MAP = {'N': wn.NOUN, 'V': wn.VERB, 'J': wn.ADJ, 'R': wn.ADV}
+try:
+    POS_MAP = {'N': wn.NOUN, 'V': wn.VERB, 'J': wn.ADJ, 'R': wn.ADV}
+except Exception:
+    POS_MAP = {'N': 'n', 'V': 'v', 'J': 'a', 'R': 'r'}
 
 
 def disambiguate(sentence: str, target_word: str):
@@ -51,3 +54,10 @@ def demo_on_emails(sentences, words=AMBIGUOUS_WORDS, max_examples=3):
             if found >= max_examples:
                 break
     return results
+
+
+if __name__ == "__main__":
+    test_sent = "Please charge the corporate account for the interest on our loan."
+    print("Sample sentence:", test_sent)
+    print("Disambiguating 'charge':", disambiguate(test_sent, "charge"))
+    print("Disambiguating 'interest':", disambiguate(test_sent, "interest"))
