@@ -173,6 +173,7 @@ def main(args):
         bidirectional=not args.no_bidirectional,
         dropout=args.dropout,
         rnn_type=args.rnn_type,
+        use_attention=args.use_attention,
     ).to(device)
 
     n_params = sum(p.numel() for p in model.parameters())
@@ -276,6 +277,7 @@ if __name__ == "__main__":
     parser.add_argument("--num_layers", type=int, default=1)
     parser.add_argument("--no_bidirectional", action="store_true")
     parser.add_argument("--dropout", type=float, default=0.3)
+    parser.add_argument("--use_attention", action="store_true")
 
     parser.add_argument("--epochs", type=int, default=8)
     parser.add_argument("--batch_size", type=int, default=32)

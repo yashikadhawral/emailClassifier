@@ -7,4 +7,8 @@ __pycache__/
 .venv/
 venv/
 data/
-saved_models/
+
+# Google OAuth secrets -- never commit these
+integrations/credentials.json
+integrations/token.json
+client_secret*.json

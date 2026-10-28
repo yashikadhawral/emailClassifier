@@ -33,6 +33,43 @@ HEDGE_WORDS = {"if", "anything", "nothing", "no", "unless", "without", "never"}
 HEDGE_WINDOW = 3
 
 
+# --- deadline cleanup -------------------------------------------------------
+# spaCy's DATE/TIME labels are noisy on real mail: ZIP codes ("CA 94107"), phone
+# numbers, bare years, and event names ("Creator Day") all get tagged, while
+# explicit dates like "21 Oct" or "15/10/2026" are sometimes missed. So: drop
+# the obvious junk, and add a regex pass for explicit dates/times.
+_MONTH = (r"(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|"
+          r"aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)")
+_DAY_WORDS = r"(?:mon|tue|tues|wed|thu|thur|thurs|fri|sat|sun)[a-z]*|today|tomorrow|tonight|noon|eod|cob"
+
+# a DATE/TIME entity must contain at least one of these to be kept
+_DATE_SIGNAL = re.compile(
+    rf"\b{_MONTH}\b|\b(?:{_DAY_WORDS})\b|\b(?:next|this|coming|last)\b|\bweek|\bmonth|\bend of\b"
+    r"|\b\d{1,2}\s*[ap]\.?m\b|\b\d{1,2}:\d{2}\b|\b\d{1,2}[/-]\d{1,2}\b"
+    r"|\b(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+(?:days?|hours?)\b",
+    re.IGNORECASE,
+)
+
+_REGEX_DATES = re.compile(
+    rf"\b\d{{1,2}}(?:st|nd|rd|th)?\s+(?:of\s+)?{_MONTH}\b(?:,?\s+\d{{4}})?"     # 21 Oct, 5th October 2026
+    rf"|\b{_MONTH}\.?\s+\d{{1,2}}(?:st|nd|rd|th)?\b(?:,?\s+\d{{4}})?"          # October 21, Oct 21 2026
+    r"|\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b"                                        # 15/10/2026
+    r"|\b\d{1,2}(?::\d{2})?\s*[ap]\.?m\b"                                       # 3:30 pm, 11 AM
+    r"|\b(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|tomorrow)\b",   # NER sometimes misses these
+    re.IGNORECASE,
+)
+
+
+_ID_NUMBERS = re.compile(r"\+?\d[\d\-\s()]{6,}\d|\d{5,}")   # phone numbers, ZIP/PIN codes, invoice ids
+
+
+def _clean_date_entity(text: str):
+    """Strips ID-like numbers out of a spaCy DATE/TIME span ("022-2345-6789 tomorrow"
+    -> "tomorrow"); returns None if nothing date-like is left ("CA 94107")."""
+    t = re.sub(r"\s+", " ", _ID_NUMBERS.sub(" ", text)).strip(" ,.-")
+    return t if t and _DATE_SIGNAL.search(t) else None
+
+
 def _keyword_hit(lowered_text: str, keywords: list) -> bool:
     words = re.findall(r"[a-z0-9']+", lowered_text)
     for kw in keywords:
@@ -63,11 +100,25 @@ def _extract_people(doc) -> list:
 
 
 def _extract_deadline(doc) -> str:
-    dates = [ent.text for ent in doc.ents if ent.label_ in ("DATE", "TIME")]
-    if not dates:
+    found = [c for c in (_clean_date_entity(ent.text) for ent in doc.ents
+                         if ent.label_ in ("DATE", "TIME")) if c]
+
+    # regex pass: explicit dates/times spaCy missed or only half-caught. spaCy often
+    # splits "3rd october, 2026" into ORDINAL "3rd" + DATE "october, 2026", so when a
+    # regex hit is a longer version of an entity we already have, it replaces that entity.
+    for m in _REGEX_DATES.finditer(doc.text):
+        hit = m.group(0).strip()
+        low = hit.lower()
+        if any(low in f.lower() for f in found):
+            continue                                   # already covered by an equal/longer entity
+        found = [f for f in found if f.lower() not in low]   # drop shorter fragments of this hit
+        found.append(hit)
+
+    if not found:
         return None
-    # prefer dates near urgency keywords if present, else just the first date found
-    return ", ".join(dict.fromkeys(dates))  # dedupe, preserve order
+    lowered = doc.text.lower()
+    found.sort(key=lambda f: lowered.find(f.lower()))     # reading order, so the date comes before its time
+    return ", ".join(dict.fromkeys(found))  # dedupe
 
 
 def _extract_referenced_doc(text: str) -> str:
