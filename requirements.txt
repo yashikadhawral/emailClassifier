@@ -1,4 +1,6 @@
-streamlit>=1.31
+fastapi>=0.100.0
+uvicorn>=0.22.0
+pydantic>=2.0.0
 torch>=2.1
 transformers>=4.38
 datasets>=2.16
@@ -10,3 +12,6 @@ langdetect>=1.0.9
 sentencepiece>=0.1.99
 sacremoses>=0.1.1
 gensim
+spacy>=3.7
+rouge_score>=0.1.2
+nltk>=3.8

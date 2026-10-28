@@ -1,16 +1,20 @@
 # api.py
 import re
 import time
+from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from pipeline import EmailAssistantPipeline
 from key_info_extractor import extract_key_info
 from category_classifier import CategoryClassifier
-from template_reply import build_reply
 
-app = FastAPI()
+ROOT = Path(__file__).resolve().parent
+
+app = FastAPI(title="Email Intelligence Report API")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 pipeline = EmailAssistantPipeline()
@@ -44,6 +48,11 @@ def parse_headers(raw: str):
 
     return from_, subject
 
+@app.get("/")
+def index():
+    """Serves the dashboard directly when navigating to http://localhost:8000/"""
+    return FileResponse(ROOT / "frontend" / "frontend.html")
+
 @app.post("/api/analyze")
 def analyze(payload: EmailIn):
     raw = payload.text
@@ -59,14 +68,11 @@ def analyze(payload: EmailIn):
             names = [n.strip() for n in people_field["v"].split(",")]
             from_ = names[-1]
 
-    result = pipeline.process(raw, sender_name=from_)
+    result = pipeline.process(raw, sender_name=from_, extracted_info=extracted)
     frontend_priority = PRIORITY_MAP.get(result["priority"], "normal")
 
-    # grounded, rule-based reply instead of flan-t5's free-generation --
-    # every claim in it traces back to something extracted, never invented
-    reply = build_reply(extracted, priority=frontend_priority, sender_name=from_)
-    if result["detected_language"] != "en":
-        reply = pipeline.translator.translate(reply, target_lang=result["detected_language"])
+    # Grounded rule-based reply from pipeline (never hallucinates, unlike free-form flan-t5)
+    reply = result["suggested_response"]
 
     key_info = [
         {"k": "Detected language", "v": result["detected_language"]},
@@ -91,3 +97,6 @@ def analyze(payload: EmailIn):
 def translate_text(payload: TranslateIn):
     translated = pipeline.translator.translate(payload.text, target_lang=payload.lang)
     return {"translated": translated}
+
+# Mount static files so assets can also be served under /frontend
+app.mount("/frontend", StaticFiles(directory=str(ROOT / "frontend")), name="frontend")

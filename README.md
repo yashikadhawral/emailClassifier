@@ -24,7 +24,9 @@ frontend.html  →  FastAPI (api.py)  →  pipeline.py  →  individual models
 | Category classification | `category_classifier.py` | Zero-shot (`facebook/bart-large-mnli`) — no labeled data required |
 | Summarization | `summarizer.py` | T5-small fine-tuned on AESLC (headline-style summaries), falls back to `facebook/bart-large-cnn` if untrained |
 | Key info extraction | `key_info_extractor.py` | spaCy NER (people, dates) + regex (filenames) + keyword-based sentiment |
-| Reply drafting | `template_reply.py` | Rule-based, built entirely from extracted key info — no LLM hallucination risk |
+| Reply drafting | `template_reply.py` | Grounded, rule-based reply built from extracted key info (avoids LLM hallucination risk; `response_generator.py` flan-t5 kept as optional comparison) |
+| Stemming Demo | `stemming.py` | NLTK PorterStemmer demo; explains why DL pipeline uses subword tokenizers & where ROUGE stems |
+| WSD Demo | `wsd.py` | Word Sense Disambiguation using Lesk algorithm |
 | Translation | `translator.py` | Wraps a translation model for language detection + EN ↔ Hindi/Marathi |
 | Orchestration | `pipeline.py` | `EmailAssistantPipeline` — wires detection → translation → priority → summary → reply together |
 | API | `api.py` | FastAPI wrapper exposing `/api/analyze` and `/api/translate` for the frontend |
@@ -73,8 +75,10 @@ emailClassifier/
 ├── category_classifier.py
 ├── summarizer.py
 ├── translator.py
-├── response_generator.py         # model-based reply drafting (flan-t5), currently unused in favor of template_reply.py
-├── template_reply.py             # rule-based reply drafting (currently used)
+├── response_generator.py         # model-based reply drafting (flan-t5), optional (kept for comparison)
+├── template_reply.py             # grounded rule-based reply drafting (used by default to prevent hallucination)
+├── stemming.py                   # NLTK PorterStemmer demo & viva notes on subword tokenizers vs stemming
+├── wsd.py                        # Word Sense Disambiguation demo using Lesk algorithm
 ├── key_info_extractor.py
 ├── data_prep.py
 ├── train_priority_classifier.py
