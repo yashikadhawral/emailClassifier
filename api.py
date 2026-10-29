@@ -30,9 +30,9 @@ app = FastAPI(title="Email Intelligence Report API")
 # same-origin and doesn't need CORS at all; these entries are just a safety net.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:8000", "http://127.0.0.1:8000", "*"],
+    allow_origins=["http://localhost:8000", "http://127.0.0.1:8000"],
     allow_methods=["GET", "POST"],
-    allow_headers=["*"],
+    allow_headers=["Content-Type"],
 )
 
 pipeline = EmailAssistantPipeline()

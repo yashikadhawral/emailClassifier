@@ -39,6 +39,7 @@ class EmailAssistantPipeline:
         sender_name: str = "",
         extracted_info: list = None,
         use_generative_reply: bool = None,
+        translate_reply: bool = False,
     ) -> dict:
         """
         Runs the full analysis pipeline on raw email text:
@@ -87,8 +88,8 @@ class EmailAssistantPipeline:
                 sender_name=sender_name
             )
 
-        # translate the drafted response back to the sender's language, if needed
-        if detected_lang != "en":
+        # Translate reply back to sender's language only if requested (api.py handles final translation)
+        if translate_reply and detected_lang != "en":
             response_final = self.translator.translate(
                 response_en,
                 target_lang=detected_lang

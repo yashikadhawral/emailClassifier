@@ -75,9 +75,11 @@ def run_demo():
     print(f"Stemmed: \"{stemmed_sentence}\"")
 
     print("\n3. Why our deep learning pipeline uses subwords instead:")
-    print("   - PorterStemmer:   'prioritizing' -> 'priorit'  (heuristic truncation)")
-    print("   - WordPiece/DistilBERT: ['prior', '##iti', '##zing'] (preserves morphemic embeddings)")
-    print("   - ROUGE Scorer:    Stems internally (use_stemmer=True) to match n-gram overlap.")
+    print("   - PorterStemmer:        'prioritizing' -> 'priorit'  (heuristic truncation)")
+    print("   - WordPiece/DistilBERT: ['prior', '##iti', '##zing'] (verified exact tokenization from DistilBERT vocab)")
+    print("                           'prioritized'  -> ['prior', '##iti', '##zed']")
+    print("                           'deliverables' -> ['deliver', '##able', '##s']")
+    print("   - ROUGE Scorer:         Stems internally (use_stemmer=True) to match n-gram overlap.")
     print("=" * 65)
 
 

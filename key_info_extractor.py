@@ -20,7 +20,7 @@ import spacy
 _NLP = None
 
 FILENAME_PATTERN = re.compile(
-    r"\b[\w,\s-]+\.(pptx?|docx?|pdf|xlsx?|csv|zip|png|jpg|jpeg)\b", re.IGNORECASE
+    r"\b[\w.-]+\.(pptx?|docx?|pdf|xlsx?|csv|zip|png|jpg|jpeg)\b", re.IGNORECASE
 )
 
 URGENT_WORDS = ["urgent", "asap", "immediately", "critical", "right away", "deadline"]
